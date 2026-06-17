@@ -1,0 +1,4 @@
+# Cloudflare Pages — ShelfSight Frontend
+name = "shelf-analysis-frontend"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-06-17"

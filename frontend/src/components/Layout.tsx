@@ -1,0 +1,32 @@
+import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+export default function Layout() {
+  const { user, logout } = useAuth();
+
+  return (
+    <div className="app-layout">
+      <header className="app-header">
+        <h1>ShelfSight</h1>
+        <nav>
+          <NavLink to="/" end>
+            Dashboard
+          </NavLink>
+          <NavLink to="/settings">Settings</NavLink>
+          {user?.role === 'admin' && (
+            <NavLink to="/admin">Admin</NavLink>
+          )}
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            {user?.email}
+          </span>
+          <button className="btn btn-secondary btn-sm" onClick={() => logout()}>
+            Logout
+          </button>
+        </nav>
+      </header>
+      <main className="app-main">
+        <Outlet />
+      </main>
+    </div>
+  );
+}

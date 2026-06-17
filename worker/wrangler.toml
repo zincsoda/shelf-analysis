@@ -1,0 +1,75 @@
+# ShelfSight API Worker
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "shelf-analysis-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-17"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Environment variables (non-secret) ──────────────────────────────────────
+[vars]
+APP_NAME = "ShelfSight"
+# Set to your Pages URL in production, e.g. https://shelf-analysis.pages.dev
+FRONTEND_URL = "https://shelf-analysis-frontend.pages.dev"
+
+# ── Secrets (set via `wrangler secret put`) ─────────────────────────────────
+# JWT_SECRET          — random 32+ char string for signing tokens
+# OPENROUTER_API_KEY  — from https://openrouter.ai/keys
+
+# ── D1 Database ─────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "shelf-analysis-db"
+database_id = "08182ce9-4f23-4bb9-98a5-69f836b002d5"
+
+# ── R2 Bucket (private — images served via authenticated Worker route) ──────
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shelf-analysis-images"
+
+# ── KV for login rate limiting ────────────────────────────────────────────────
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "f6d4777bd8644746befacc0762df68dd"
+
+# ── Local development secrets ─────────────────────────────────────────────────
+# Copy .dev.vars.example to .dev.vars and fill in values
+
+[dev]
+port = 8787
+
+# ── Staging environment ───────────────────────────────────────────────────────
+[env.staging]
+name = "shelf-analysis-api-staging"
+vars = { FRONTEND_URL = "https://shelf-analysis-staging.pages.dev" }
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "shelf-analysis-db-staging"
+database_id = "REPLACE_WITH_STAGING_DB_ID"
+
+[[env.staging.r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shelf-analysis-images-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_WITH_STAGING_KV_ID"
+
+# ── Production environment ────────────────────────────────────────────────────
+[env.production]
+name = "shelf-analysis-api"
+vars = { FRONTEND_URL = "https://shelf-analysis.pages.dev" }
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "shelf-analysis-db"
+database_id = "08182ce9-4f23-4bb9-98a5-69f836b002d5"
+
+[[env.production.r2_buckets]]
+binding = "IMAGES"
+bucket_name = "shelf-analysis-images"
+
+[[env.production.kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "f6d4777bd8644746befacc0762df68dd"

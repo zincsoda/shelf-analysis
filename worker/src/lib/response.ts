@@ -38,12 +38,24 @@ export function corsHeaders(configuredOrigin: string, request?: Request): Header
   };
 }
 
-/** Allow localhost origins during local development */
-function resolveAllowedOrigin(configuredOrigin: string, requestOrigin: string | null): string {
-  if (requestOrigin && (requestOrigin === configuredOrigin || isLocalDevOrigin(requestOrigin))) {
+/** Comma-separated list of allowed frontend origins (first entry is the primary URL). */
+function parseConfiguredOrigins(configuredOrigins: string): string[] {
+  return configuredOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+/** Allow configured origins and localhost during local development */
+function resolveAllowedOrigin(configuredOrigins: string, requestOrigin: string | null): string {
+  const allowedOrigins = parseConfiguredOrigins(configuredOrigins);
+  const primaryOrigin = allowedOrigins[0] ?? '';
+
+  if (requestOrigin && (allowedOrigins.includes(requestOrigin) || isLocalDevOrigin(requestOrigin))) {
     return requestOrigin;
   }
-  return configuredOrigin;
+
+  return primaryOrigin;
 }
 
 function isLocalDevOrigin(origin: string): boolean {

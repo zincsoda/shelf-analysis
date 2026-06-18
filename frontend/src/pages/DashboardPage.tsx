@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type DragEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { AI_MODELS, api, ApiError } from '../api/client';
+import { api, ApiError } from '../api/client';
 import type { Analysis } from '@shelf-analysis/shared';
 import { useAuth } from '../context/AuthContext';
 import { formatConfidence, formatDate, formatPercent, resizeImage } from '../lib/utils';
@@ -14,7 +14,8 @@ export default function DashboardPage() {
   const [success, setSuccess] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [model, setModel] = useState<string>(AI_MODELS[0]);
+  const [model, setModel] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [latestResult, setLatestResult] = useState<Analysis | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -32,6 +33,17 @@ export default function DashboardPage() {
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    api.getSettings()
+      .then(({ settings }) => {
+        setAvailableModels(settings.selected_models);
+        setModel((current) => current || settings.selected_models[0] || '');
+      })
+      .catch(() => {
+        /* ignore */
+      });
+  }, []);
 
   function handleFileSelect(selected: File) {
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -68,8 +80,6 @@ export default function DashboardPage() {
       const { analysis } = await api.analyze(resized, model);
       setLatestResult(analysis);
       setSuccess('Analysis complete!');
-      setFile(null);
-      setPreview(null);
       await loadHistory();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -125,17 +135,31 @@ export default function DashboardPage() {
 
           <div className="form-group" style={{ marginTop: '1rem' }}>
             <label htmlFor="model">AI Model</label>
-            <select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
-              {AI_MODELS.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+            <select
+              id="model"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={availableModels.length === 0}
+            >
+              {availableModels.length === 0 ? (
+                <option value="">Configure models in Settings</option>
+              ) : (
+                availableModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))
+              )}
             </select>
+            {availableModels.length === 0 && (
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                <Link to="/settings">Choose models to test</Link> before running an analysis.
+              </p>
+            )}
           </div>
 
           <button
             className="btn btn-primary"
             type="submit"
-            disabled={!file || uploading}
+            disabled={!file || uploading || !model}
           >
             {uploading ? 'Analyzing…' : 'Analyze Shelf'}
           </button>

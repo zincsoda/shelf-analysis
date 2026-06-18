@@ -1,8 +1,14 @@
-import type { UpdateOpenRouterKeyRequest, UserSettings } from '@shelf-analysis/shared';
+import type {
+  UpdateOpenRouterKeyRequest,
+  UpdateSelectedModelsRequest,
+  UserSettings,
+} from '@shelf-analysis/shared';
 import type { Env, UserRow } from '../types';
 import { decryptSecret, encryptSecret, maskApiKey } from '../lib/secrets';
 import { jsonError, jsonSuccess, parseJsonBody } from '../lib/response';
 import { requireAuth, rowToUser } from '../middleware/auth';
+import { fetchOpenRouterModels } from '../services/openrouter';
+import { parseSelectedModels, resolveSelectedModels } from '../services/user-settings';
 
 const MIN_KEY_LENGTH = 10;
 
@@ -11,31 +17,81 @@ function isValidOpenRouterKey(key: string): boolean {
   return trimmed.length >= MIN_KEY_LENGTH && !/\s/.test(trimmed);
 }
 
-/** GET /api/settings */
-export async function handleGetSettings(request: Request, env: Env): Promise<Response> {
-  const auth = await requireAuth(request, env);
-  if (auth instanceof Response) return auth;
-
-  const row = await env.DB.prepare(
-    'SELECT openrouter_api_key_encrypted FROM users WHERE id = ?',
-  )
-    .bind(auth.user.id)
-    .first<Pick<UserRow, 'openrouter_api_key_encrypted'>>();
+async function buildUserSettings(
+  env: Env,
+  row: Pick<UserRow, 'openrouter_api_key_encrypted' | 'selected_models'>,
+  availableModelIds?: Set<string>,
+  availableModelIdsList?: string[],
+): Promise<UserSettings> {
+  const stored = parseSelectedModels(row.selected_models);
+  const selected_models =
+    availableModelIds && availableModelIdsList
+      ? resolveSelectedModels(stored, availableModelIds, availableModelIdsList)
+      : stored;
 
   const settings: UserSettings = {
-    has_openrouter_api_key: Boolean(row?.openrouter_api_key_encrypted),
+    has_openrouter_api_key: Boolean(row.openrouter_api_key_encrypted),
     openrouter_key_hint: null,
     uses_global_openrouter_key: false,
+    selected_models,
   };
 
-  if (row?.openrouter_api_key_encrypted) {
+  if (row.openrouter_api_key_encrypted) {
     const decrypted = await decryptSecret(row.openrouter_api_key_encrypted, env.JWT_SECRET);
     settings.openrouter_key_hint = decrypted ? maskApiKey(decrypted) : null;
   } else if (env.OPENROUTER_API_KEY) {
     settings.uses_global_openrouter_key = true;
   }
 
+  return settings;
+}
+
+async function loadAvailableModelIds(): Promise<{ ids: Set<string>; list: string[] }> {
+  const models = await fetchOpenRouterModels();
+  const list = models.map((model) => model.id);
+  return { ids: new Set(list), list };
+}
+
+/** GET /api/settings */
+export async function handleGetSettings(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const row = await env.DB.prepare(
+    'SELECT openrouter_api_key_encrypted, selected_models FROM users WHERE id = ?',
+  )
+    .bind(auth.user.id)
+    .first<Pick<UserRow, 'openrouter_api_key_encrypted' | 'selected_models'>>();
+
+  let available: { ids: Set<string>; list: string[] } | undefined;
+  try {
+    available = await loadAvailableModelIds();
+  } catch {
+    /* fall back to stored values if OpenRouter is unreachable */
+  }
+
+  const settings = await buildUserSettings(
+    env,
+    row ?? { openrouter_api_key_encrypted: null, selected_models: null },
+    available?.ids,
+    available?.list,
+  );
+
   return jsonSuccess({ settings });
+}
+
+/** GET /api/settings/openrouter-models */
+export async function handleGetOpenRouterModels(request: Request, env: Env): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  try {
+    const models = await fetchOpenRouterModels();
+    return jsonSuccess({ models });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch models from OpenRouter';
+    return jsonError('UPSTREAM_ERROR', message, 502);
+  }
 }
 
 /** PUT /api/settings/openrouter-key */
@@ -79,18 +135,64 @@ export async function handleUpdateOpenRouterKey(
     return jsonError('NOT_FOUND', 'User not found', 404);
   }
 
-  const settings: UserSettings = {
-    has_openrouter_api_key: Boolean(row.openrouter_api_key_encrypted),
-    openrouter_key_hint: null,
-    uses_global_openrouter_key: false,
-  };
-
-  if (row.openrouter_api_key_encrypted) {
-    const decrypted = await decryptSecret(row.openrouter_api_key_encrypted, env.JWT_SECRET);
-    settings.openrouter_key_hint = decrypted ? maskApiKey(decrypted) : null;
-  } else if (env.OPENROUTER_API_KEY) {
-    settings.uses_global_openrouter_key = true;
-  }
+  const settings = await buildUserSettings(env, row);
 
   return jsonSuccess({ settings, user: rowToUser(row) });
+}
+
+/** PUT /api/settings/selected-models */
+export async function handleUpdateSelectedModels(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const auth = await requireAuth(request, env);
+  if (auth instanceof Response) return auth;
+
+  const body = await parseJsonBody<UpdateSelectedModelsRequest>(request);
+  if (!body || !Array.isArray(body.selected_models)) {
+    return jsonError('VALIDATION_ERROR', 'selected_models must be an array of model IDs', 400);
+  }
+
+  const uniqueModels = [...new Set(
+    body.selected_models.filter((model): model is string => typeof model === 'string' && model.trim().length > 0),
+  )];
+
+  if (uniqueModels.length === 0) {
+    return jsonError('VALIDATION_ERROR', 'Select at least one model', 400);
+  }
+
+  let availableModels: Set<string>;
+  let availableModelIdsList: string[];
+  try {
+    const available = await loadAvailableModelIds();
+    availableModels = available.ids;
+    availableModelIdsList = available.list;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to validate models with OpenRouter';
+    return jsonError('UPSTREAM_ERROR', message, 502);
+  }
+
+  const validModels = uniqueModels.filter((model) => availableModels.has(model));
+  if (validModels.length === 0) {
+    return jsonError('VALIDATION_ERROR', 'Select at least one supported model', 400);
+  }
+
+  await env.DB.prepare('UPDATE users SET selected_models = ? WHERE id = ?')
+    .bind(JSON.stringify(validModels), auth.user.id)
+    .run();
+
+  const row = await env.DB.prepare(
+    'SELECT openrouter_api_key_encrypted, selected_models FROM users WHERE id = ?',
+  )
+    .bind(auth.user.id)
+    .first<Pick<UserRow, 'openrouter_api_key_encrypted' | 'selected_models'>>();
+
+  const settings = await buildUserSettings(
+    env,
+    row ?? { openrouter_api_key_encrypted: null, selected_models: null },
+    availableModels,
+    availableModelIdsList,
+  );
+
+  return jsonSuccess({ settings });
 }

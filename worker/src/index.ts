@@ -13,7 +13,7 @@ import {
   handleGetImage,
   handleListAnalyses,
 } from './routes/analyses';
-import { handleGetSettings, handleUpdateOpenRouterKey } from './routes/settings';
+import { handleGetSettings, handleGetOpenRouterModels, handleUpdateOpenRouterKey, handleUpdateSelectedModels } from './routes/settings';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -75,6 +75,12 @@ async function route(
   }
   if (pathname === '/api/settings/openrouter-key' && method === 'PUT') {
     return handleUpdateOpenRouterKey(request, env);
+  }
+  if (pathname === '/api/settings/openrouter-models' && method === 'GET') {
+    return handleGetOpenRouterModels(request, env);
+  }
+  if (pathname === '/api/settings/selected-models' && method === 'PUT') {
+    return handleUpdateSelectedModels(request, env);
   }
 
   // ── Admin routes ─────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 import type { Analysis, AnalysisWithUser } from '@shelf-analysis/shared';
 import type { AnalysisRow, Env } from '../types';
 import { requireAdmin, requireAuth } from '../middleware/auth';
-import { analyzeShelfImage, isValidModel } from '../services/openrouter';
-import { resolveOpenRouterApiKey } from '../services/user-settings';
+import { analyzeShelfImage, isAllowedModel } from '../services/openrouter';
+import { getUserSelectedModels, resolveOpenRouterApiKey } from '../services/user-settings';
 import {
   bufferToBase64,
   getImage,
@@ -45,7 +45,8 @@ export async function handleAnalyze(request: Request, env: Env): Promise<Respons
   }
   const uploadFile = file as File;
   const model = formData.get('model');
-  if (typeof model !== 'string' || !isValidModel(model)) {
+  const allowedModels = await getUserSelectedModels(env, auth.user.id);
+  if (typeof model !== 'string' || !isAllowedModel(model, allowedModels)) {
     return jsonError('VALIDATION_ERROR', 'Valid AI model selection is required', 400);
   }
 

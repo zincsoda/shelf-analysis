@@ -5,7 +5,9 @@ import type {
   AuthSession,
   CreateUserRequest,
   LoginRequest,
+  OpenRouterModel,
   UpdateOpenRouterKeyRequest,
+  UpdateSelectedModelsRequest,
   UpdateUserRequest,
   User,
   UserSettings,
@@ -78,6 +80,18 @@ class ApiClient {
   updateOpenRouterKey(openrouter_api_key: string | null) {
     const body: UpdateOpenRouterKeyRequest = { openrouter_api_key };
     return this.request<{ settings: UserSettings; user: User }>('/api/settings/openrouter-key', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  getOpenRouterModels() {
+    return this.request<{ models: OpenRouterModel[] }>('/api/settings/openrouter-models');
+  }
+
+  updateSelectedModels(selected_models: string[]) {
+    const body: UpdateSelectedModelsRequest = { selected_models };
+    return this.request<{ settings: UserSettings }>('/api/settings/selected-models', {
       method: 'PUT',
       body: JSON.stringify(body),
     });

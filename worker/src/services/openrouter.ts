@@ -1,4 +1,5 @@
-import { AI_MODELS, type AiAnalysisResult, type AiModel } from '@shelf-analysis/shared';
+import type { OpenRouterModel } from '@shelf-analysis/shared';
+import type { AiAnalysisResult } from '@shelf-analysis/shared';
 import type { Env } from '../types';
 
 const ANALYSIS_PROMPT = `Analyze this supermarket shelf image. Estimate the percentage of empty shelf space. Return ONLY valid JSON in this format:
@@ -8,16 +9,56 @@ const ANALYSIS_PROMPT = `Analyze this supermarket shelf image. Estimate the perc
   "analysis": "short explanation"
 }`;
 
-/** Validate that a model string is in the allowed list */
-export function isValidModel(model: string): model is AiModel {
-  return (AI_MODELS as readonly string[]).includes(model);
+/** Check that a model is in the user's allowed list */
+export function isAllowedModel(model: string, allowedModels: readonly string[]): boolean {
+  return allowedModels.includes(model);
+}
+
+/** Fetch vision-capable models from OpenRouter (image input + text output) */
+export async function fetchOpenRouterModels(): Promise<OpenRouterModel[]> {
+  const url = new URL('https://openrouter.ai/api/v1/models');
+  url.searchParams.set('input_modalities', 'image');
+  url.searchParams.set('output_modalities', 'text');
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`OpenRouter models API error (${response.status}): ${errText}`);
+  }
+
+  const payload = (await response.json()) as {
+    data?: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      context_length?: number;
+      architecture?: { output_modalities?: string[] };
+      pricing?: { prompt?: string; completion?: string };
+    }>;
+  };
+
+  const models = (payload.data ?? [])
+    .filter((model) => model.architecture?.output_modalities?.includes('text'))
+    .map((model) => ({
+      id: model.id,
+      name: model.name,
+      description: model.description ?? null,
+      context_length: model.context_length ?? 0,
+      pricing: {
+        prompt: model.pricing?.prompt ?? '0',
+        completion: model.pricing?.completion ?? '0',
+      },
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return models;
 }
 
 /** Call OpenRouter vision API with base64-encoded image */
 export async function analyzeShelfImage(
   env: Env,
   apiKey: string,
-  model: AiModel,
+  model: string,
   imageBase64: string,
   mimeType: string,
 ): Promise<AiAnalysisResult> {
@@ -26,7 +67,7 @@ export async function analyzeShelfImage(
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': env.FRONTEND_URL,
+      'HTTP-Referer': env.FRONTEND_URL.split(',')[0].trim(),
       'X-Title': env.APP_NAME,
     },
     body: JSON.stringify({

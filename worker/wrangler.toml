@@ -9,8 +9,8 @@ compatibility_flags = ["nodejs_compat"]
 # ── Environment variables (non-secret) ──────────────────────────────────────
 [vars]
 APP_NAME = "ShelfSight"
-# Set to your Pages URL in production, e.g. https://shelf-analysis.pages.dev
-FRONTEND_URL = "https://shelf-analysis-frontend.pages.dev"
+# Comma-separated frontend origins for CORS (first is primary, e.g. OpenRouter referer)
+FRONTEND_URL = "https://shelfsight.swlabs.cc,https://shelf-analysis-frontend.pages.dev"
 
 # ── Secrets (set via `wrangler secret put`) ─────────────────────────────────
 # JWT_SECRET          — random 32+ char string for signing tokens

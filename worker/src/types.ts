@@ -27,6 +27,7 @@ export interface UserRow {
   is_active: number;
   created_at: string;
   openrouter_api_key_encrypted: string | null;
+  selected_models: string | null;
 }
 
 /** Database row shape for analyses table */

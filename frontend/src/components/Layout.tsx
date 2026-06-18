@@ -10,15 +10,12 @@ export default function Layout() {
         <h1>ShelfSight</h1>
         <nav>
           <NavLink to="/" end>
-            Dashboard
+            Analyse
           </NavLink>
           <NavLink to="/settings">Settings</NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin">Admin</NavLink>
           )}
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            {user?.email}
-          </span>
           <button className="btn btn-secondary btn-sm" onClick={() => logout()}>
             Logout
           </button>

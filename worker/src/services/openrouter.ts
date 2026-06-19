@@ -85,6 +85,7 @@ export async function analyzeShelfImage(
         },
       ],
       response_format: { type: 'json_object' },
+      plugins: [{ id: 'response-healing' }],
     }),
   });
 
@@ -105,33 +106,121 @@ export async function analyzeShelfImage(
   return parseAiResponse(content);
 }
 
+/** Extract a JSON object from model output (handles prose and markdown fences) */
+function extractJsonPayload(content: string): string {
+  const trimmed = content.trim();
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const start = trimmed.indexOf('{');
+  if (start === -1) return trimmed;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < trimmed.length; i++) {
+    const char = trimmed[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') depth++;
+    else if (char === '}') {
+      depth--;
+      if (depth === 0) return trimmed.slice(start, i + 1);
+    }
+  }
+
+  return trimmed.slice(start);
+}
+
+function coercePercentage(value: unknown, field: string): number {
+  let num: number | null = null;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    num = value;
+  } else if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value.replace(/%/g, '').trim());
+    if (Number.isFinite(parsed)) num = parsed;
+  }
+
+  if (num === null) {
+    throw new Error(`Invalid ${field} in AI response`);
+  }
+
+  return num;
+}
+
+function normalizeConfidence(value: unknown): number {
+  let confidence = coercePercentage(value, 'confidence');
+  if (confidence > 1 && confidence <= 100) {
+    confidence /= 100;
+  }
+  if (confidence < 0 || confidence > 1) {
+    throw new Error('Invalid confidence in AI response');
+  }
+  return confidence;
+}
+
 /** Parse and validate AI JSON response */
 function parseAiResponse(content: string): AiAnalysisResult {
-  // Strip markdown code fences if present
-  const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const candidates = [
+    content.trim(),
+    extractJsonPayload(content),
+  ];
 
   let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error('AI returned invalid JSON');
+  let lastError: unknown;
+
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      parsed = JSON.parse(candidate);
+      lastError = undefined;
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastError !== undefined) {
+    const preview = content.trim().slice(0, 120).replace(/\s+/g, ' ');
+    throw new Error(`AI returned invalid JSON${preview ? `: ${preview}` : ''}`);
   }
 
   const result = parsed as Record<string, unknown>;
-
-  if (typeof result.empty_percentage !== 'number' || result.empty_percentage < 0 || result.empty_percentage > 100) {
+  const emptyPercentage = coercePercentage(result.empty_percentage, 'empty_percentage');
+  if (emptyPercentage < 0 || emptyPercentage > 100) {
     throw new Error('Invalid empty_percentage in AI response');
   }
-  if (typeof result.confidence !== 'number' || result.confidence < 0 || result.confidence > 1) {
-    throw new Error('Invalid confidence in AI response');
-  }
-  if (typeof result.analysis !== 'string' || !result.analysis.trim()) {
+
+  const analysis =
+    typeof result.analysis === 'string'
+      ? result.analysis.trim()
+      : typeof result.analysis === 'number'
+        ? String(result.analysis)
+        : '';
+  if (!analysis) {
     throw new Error('Invalid analysis text in AI response');
   }
 
   return {
-    empty_percentage: result.empty_percentage,
-    confidence: result.confidence,
-    analysis: result.analysis,
+    empty_percentage: emptyPercentage,
+    confidence: normalizeConfidence(result.confidence),
+    analysis,
   };
 }

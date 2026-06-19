@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [zonePreview, setZonePreview] = useState<string | null>(null);
   const [loadingCamera, setLoadingCamera] = useState(false);
   const [loadingZonePreview, setLoadingZonePreview] = useState(false);
+  const [modelCopied, setModelCopied] = useState(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -202,6 +203,17 @@ export default function DashboardPage() {
       ? Boolean(file)
       : Boolean(selectedCameraId && selectedZone);
 
+  const copyModelName = async () => {
+    if (!model) return;
+    try {
+      await navigator.clipboard.writeText(model);
+      setModelCopied(true);
+      window.setTimeout(() => setModelCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <>
       {!user?.has_openrouter_api_key && (
@@ -355,20 +367,41 @@ export default function DashboardPage() {
 
           <div className="form-group" style={{ marginTop: '1rem' }}>
             <label htmlFor="model">AI Model</label>
-            <select
-              id="model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={availableModels.length === 0}
-            >
-              {availableModels.length === 0 ? (
-                <option value="">Configure models in Settings</option>
-              ) : (
-                availableModels.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))
-              )}
-            </select>
+            <div className="model-select-row">
+              <select
+                id="model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={availableModels.length === 0}
+              >
+                {availableModels.length === 0 ? (
+                  <option value="">Configure models in Settings</option>
+                ) : (
+                  availableModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))
+                )}
+              </select>
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={copyModelName}
+                disabled={!model}
+                title={modelCopied ? 'Copied!' : 'Copy model name'}
+                aria-label={modelCopied ? 'Copied model name' : 'Copy model name to clipboard'}
+              >
+                {modelCopied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                )}
+              </button>
+            </div>
             {availableModels.length === 0 && (
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                 <Link to="/settings">Choose models to test</Link> before running an analysis.

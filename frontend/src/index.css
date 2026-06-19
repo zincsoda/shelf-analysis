@@ -746,3 +746,26 @@ tr:hover td {
   border-radius: 6px;
   font-size: 0.85rem;
 }
+
+.deployment-info {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.deployment-info-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.deployment-info-row dt {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.deployment-info-row dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}

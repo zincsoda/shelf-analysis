@@ -11,6 +11,21 @@ function formatModelPrice(promptPerToken: string): string {
   return `$${perMillion.toFixed(2)}/M`;
 }
 
+function formatCommitDate(isoDate: string): string {
+  if (!isoDate) return 'Unknown';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+const GIT_COMMIT = __APP_GIT_COMMIT__;
+const GIT_COMMIT_SHORT = __APP_GIT_COMMIT_SHORT__;
+const GIT_COMMIT_DATE = __APP_GIT_COMMIT_DATE__;
+const GIT_REPO_URL = 'https://github.com/zincsoda/shelf-analysis';
+
 export default function SettingsPage() {
   const { user, refresh } = useAuth();
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -399,6 +414,33 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
+
+      <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '2rem 0' }} />
+
+      <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Deployment</h3>
+      <dl className="deployment-info">
+        <div className="deployment-info-row">
+          <dt>Commit</dt>
+          <dd>
+            {GIT_COMMIT_SHORT ? (
+              <a
+                href={`${GIT_REPO_URL}/commit/${GIT_COMMIT}`}
+                target="_blank"
+                rel="noreferrer"
+                title={GIT_COMMIT}
+              >
+                {GIT_COMMIT_SHORT}
+              </a>
+            ) : (
+              'Unknown'
+            )}
+          </dd>
+        </div>
+        <div className="deployment-info-row">
+          <dt>Last commit</dt>
+          <dd>{formatCommitDate(GIT_COMMIT_DATE)}</dd>
+        </div>
+      </dl>
 
       <p style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
         <Link to="/">Back to dashboard</Link>

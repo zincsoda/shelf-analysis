@@ -6,6 +6,8 @@ import DashboardPage from './pages/DashboardPage';
 import AnalysisDetailPage from './pages/AnalysisDetailPage';
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
+import CamerasPage from './pages/CamerasPage';
+import CameraDetailPage from './pages/CameraDetailPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -44,6 +46,8 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="cameras" element={<CamerasPage />} />
+        <Route path="cameras/:id" element={<CameraDetailPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="analysis/:id" element={<AnalysisDetailPage />} />
         <Route

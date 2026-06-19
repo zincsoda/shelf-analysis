@@ -32,15 +32,12 @@ async function buildUserSettings(
   const settings: UserSettings = {
     has_openrouter_api_key: Boolean(row.openrouter_api_key_encrypted),
     openrouter_key_hint: null,
-    uses_global_openrouter_key: false,
     selected_models,
   };
 
   if (row.openrouter_api_key_encrypted) {
     const decrypted = await decryptSecret(row.openrouter_api_key_encrypted, env.JWT_SECRET);
     settings.openrouter_key_hint = decrypted ? maskApiKey(decrypted) : null;
-  } else if (env.OPENROUTER_API_KEY) {
-    settings.uses_global_openrouter_key = true;
   }
 
   return settings;

@@ -12,6 +12,7 @@ export default function Layout() {
           <NavLink to="/" end>
             Analyse
           </NavLink>
+          <NavLink to="/cameras">Cameras</NavLink>
           <NavLink to="/settings">Settings</NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin">Admin</NavLink>

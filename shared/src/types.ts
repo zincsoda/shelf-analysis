@@ -36,8 +36,6 @@ export interface User {
 export interface UserSettings {
   has_openrouter_api_key: boolean;
   openrouter_key_hint: string | null;
-  /** True when no personal key is set but a global worker key is available */
-  uses_global_openrouter_key: boolean;
   /** Models available in the analysis dropdown */
   selected_models: string[];
 }
@@ -116,4 +114,63 @@ export interface UpdateOpenRouterKeyRequest {
 /** Update the models shown in the analysis dropdown */
 export interface UpdateSelectedModelsRequest {
   selected_models: string[];
+}
+
+export type CameraType = 'virtual' | 'real';
+
+/** IP camera configuration */
+export interface Camera {
+  id: string;
+  user_id: string;
+  name: string;
+  type: CameraType;
+  stream_url: string | null;
+  has_snapshot: boolean;
+  zone_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Detection zone on a camera view (normalized 0–1 coordinates) */
+export interface CameraZone {
+  id: string;
+  camera_id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  created_at: string;
+}
+
+/** Camera with its zones loaded */
+export interface CameraWithZones extends Camera {
+  zones: CameraZone[];
+}
+
+export interface CreateCameraRequest {
+  name: string;
+  type: CameraType;
+  stream_url?: string | null;
+}
+
+export interface UpdateCameraRequest {
+  name?: string;
+  stream_url?: string | null;
+}
+
+export interface CreateZoneRequest {
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface UpdateZoneRequest {
+  name?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }

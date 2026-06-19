@@ -49,6 +49,25 @@ export async function deleteImage(bucket: R2Bucket, key: string): Promise<void> 
   await bucket.delete(key);
 }
 
+/** Store camera snapshot/reference frame in R2 */
+export async function storeCameraSnapshot(
+  bucket: R2Bucket,
+  userId: string,
+  cameraId: string,
+  bytes: ArrayBuffer,
+  mimeType: string,
+): Promise<string> {
+  const extension = mimeToExtension(mimeType);
+  const key = `cameras/${userId}/${cameraId}.${extension}`;
+
+  await bucket.put(key, bytes, {
+    httpMetadata: { contentType: mimeType },
+    customMetadata: { userId, cameraId },
+  });
+
+  return key;
+}
+
 /** Convert ArrayBuffer to base64 string for OpenRouter */
 export function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);

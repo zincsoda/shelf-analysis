@@ -38,7 +38,7 @@ shelf-analysis/
 - Node.js 20+
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) v4+
 - Cloudflare account
-- OpenRouter API key
+- Each user adds their own OpenRouter API key in Settings
 
 ## Quick Start (Local)
 
@@ -68,7 +68,7 @@ npx wrangler kv namespace create RATE_LIMIT
 
 ```bash
 cp worker/.dev.vars.example worker/.dev.vars
-# Edit .dev.vars with your JWT_SECRET and OPENROUTER_API_KEY
+# Edit .dev.vars with your JWT_SECRET
 ```
 
 ### 4. Run migrations
@@ -118,7 +118,6 @@ npm run dev
 ```bash
 cd worker
 npx wrangler secret put JWT_SECRET
-npx wrangler secret put OPENROUTER_API_KEY
 npm run db:migrate:remote
 npm run deploy
 ```
@@ -127,10 +126,11 @@ npm run deploy
 
 ```bash
 cd frontend
-# Set VITE_API_URL to your Worker URL if on different domain
-VITE_API_URL=https://shelf-analysis-api.your-subdomain.workers.dev npm run build
+cp .env.example .env.production   # sets VITE_API_URL to your Worker URL
 npm run deploy
 ```
+
+The frontend and API are on different domains (`shelfsight.swlabs.cc` vs `*.workers.dev`), so `VITE_API_URL` must be set at build time. Without it, login POSTs hit Pages static hosting and return HTTP 405.
 
 ### CORS & Cookies
 

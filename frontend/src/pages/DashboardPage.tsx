@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState, type DragEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import type { Analysis } from '@shelf-analysis/shared';
+import type { Analysis, Camera, CameraWithZones, CameraZone } from '@shelf-analysis/shared';
 import { useAuth } from '../context/AuthContext';
+import { cropImageFromZone, cropImagePreviewUrl } from '../lib/image-crop';
 import { formatConfidence, formatDate, formatPercent, resizeImage } from '../lib/utils';
+
+type SourceMode = 'upload' | 'zone';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -12,12 +15,21 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [sourceMode, setSourceMode] = useState<SourceMode>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [model, setModel] = useState<string>('');
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [latestResult, setLatestResult] = useState<Analysis | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
+  const [selectedCamera, setSelectedCamera] = useState<CameraWithZones | null>(null);
+  const [selectedZoneId, setSelectedZoneId] = useState('');
+  const [zonePreview, setZonePreview] = useState<string | null>(null);
+  const [loadingCamera, setLoadingCamera] = useState(false);
+  const [loadingZonePreview, setLoadingZonePreview] = useState(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -45,6 +57,73 @@ export default function DashboardPage() {
       });
   }, []);
 
+  useEffect(() => {
+    api.listCameras()
+      .then(({ cameras: list }) => setCameras(list))
+      .catch(() => {
+        /* ignore */
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCameraId) {
+      setSelectedCamera(null);
+      setSelectedZoneId('');
+      setZonePreview(null);
+      return;
+    }
+
+    setLoadingCamera(true);
+    setSelectedZoneId('');
+    setZonePreview(null);
+
+    api.getCamera(selectedCameraId)
+      .then(({ camera }) => setSelectedCamera(camera))
+      .catch((err) => {
+        if (err instanceof ApiError) setError(err.message);
+        setSelectedCamera(null);
+      })
+      .finally(() => setLoadingCamera(false));
+  }, [selectedCameraId]);
+
+  const selectedZone: CameraZone | null =
+    selectedCamera?.zones.find((z) => z.id === selectedZoneId) ?? null;
+
+  useEffect(() => {
+    if (!selectedCameraId || !selectedZoneId || !selectedCamera || loadingCamera) {
+      setZonePreview(null);
+      return;
+    }
+
+    const zone = selectedCamera.zones.find((z) => z.id === selectedZoneId);
+    if (!zone) {
+      setZonePreview(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingZonePreview(true);
+
+    api.fetchCameraPreview(selectedCameraId)
+      .then((blob) => cropImagePreviewUrl(blob, zone))
+      .then((url) => {
+        if (!cancelled) setZonePreview(url);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          if (err instanceof ApiError) setError(err.message);
+          setZonePreview(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingZonePreview(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCameraId, selectedZoneId, selectedCamera, loadingCamera]);
+
   function handleFileSelect(selected: File) {
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowed.includes(selected.type)) {
@@ -67,19 +146,45 @@ export default function DashboardPage() {
     if (dropped) handleFileSelect(dropped);
   }
 
+  function switchSourceMode(mode: SourceMode) {
+    setSourceMode(mode);
+    setError('');
+    if (mode === 'upload') {
+      setSelectedCameraId('');
+      setSelectedZoneId('');
+      setZonePreview(null);
+    } else {
+      setFile(null);
+      setPreview(null);
+    }
+  }
+
   async function handleAnalyze(e: FormEvent) {
     e.preventDefault();
-    if (!file) return;
-
     setError('');
     setSuccess('');
     setUploading(true);
 
     try {
-      const resized = await resizeImage(file);
-      const { analysis } = await api.analyze(resized, model);
+      let imageToAnalyze: File;
+
+      if (sourceMode === 'upload') {
+        if (!file) return;
+        imageToAnalyze = await resizeImage(file);
+      } else {
+        if (!selectedCameraId || !selectedZone) return;
+        const previewBlob = await api.fetchCameraPreview(selectedCameraId);
+        const cropped = await cropImageFromZone(previewBlob, selectedZone);
+        imageToAnalyze = await resizeImage(cropped);
+      }
+
+      const { analysis } = await api.analyze(imageToAnalyze, model);
       setLatestResult(analysis);
-      setSuccess('Analysis complete!');
+      setSuccess(
+        sourceMode === 'zone' && selectedZone
+          ? `Analysis complete for zone "${selectedZone.name}"!`
+          : 'Analysis complete!',
+      );
       await loadHistory();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -92,6 +197,11 @@ export default function DashboardPage() {
     }
   }
 
+  const canAnalyze =
+    sourceMode === 'upload'
+      ? Boolean(file)
+      : Boolean(selectedCameraId && selectedZone);
+
   return (
     <>
       {!user?.has_openrouter_api_key && (
@@ -102,35 +212,145 @@ export default function DashboardPage() {
       )}
 
       <div className="card">
-        <h2>Upload Shelf Image</h2>
+        <h2>Analyse Shelf</h2>
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
 
-        <form onSubmit={handleAnalyze}>
-          <div
-            className={`upload-zone ${dragOver ? 'dragover' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => document.getElementById('file-input')?.click()}
+        <div className="source-toggle" role="tablist" aria-label="Image source">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sourceMode === 'upload'}
+            className={`source-toggle-btn${sourceMode === 'upload' ? ' active' : ''}`}
+            onClick={() => switchSourceMode('upload')}
           >
-            <input
-              id="file-input"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFileSelect(f);
-              }}
-            />
-            <p>Drop an image here or click to browse</p>
-            <p style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
-              JPEG, PNG, WebP — max 5 MB
-            </p>
-          </div>
+            Upload image
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sourceMode === 'zone'}
+            className={`source-toggle-btn${sourceMode === 'zone' ? ' active' : ''}`}
+            onClick={() => switchSourceMode('zone')}
+          >
+            Camera zone
+          </button>
+        </div>
 
-          {preview && (
-            <img src={preview} alt="Preview" className="upload-preview" />
+        <form onSubmit={handleAnalyze}>
+          {sourceMode === 'upload' ? (
+            <>
+              <div
+                className={`upload-zone ${dragOver ? 'dragover' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => document.getElementById('file-input')?.click()}
+              >
+                <input
+                  id="file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFileSelect(f);
+                  }}
+                />
+                <p>Drop an image here or click to browse</p>
+                <p style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                  JPEG, PNG, WebP — max 5 MB
+                </p>
+              </div>
+
+              {preview && (
+                <img src={preview} alt="Preview" className="upload-preview" />
+              )}
+            </>
+          ) : (
+            <div className="zone-source-panel">
+              {cameras.length === 0 ? (
+                <div className="empty-state">
+                  <p>No cameras configured yet.</p>
+                  <p className="text-muted">
+                    <Link to="/cameras">Add a camera</Link> and draw zones before analysing.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="camera-select">Camera</label>
+                    <select
+                      id="camera-select"
+                      value={selectedCameraId}
+                      onChange={(e) => setSelectedCameraId(e.target.value)}
+                    >
+                      <option value="">Select a camera…</option>
+                      {cameras.map((camera) => (
+                        <option key={camera.id} value={camera.id}>
+                          {camera.name} ({camera.zone_count} zone{camera.zone_count === 1 ? '' : 's'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {loadingCamera && <p className="text-muted">Loading camera…</p>}
+
+                  {selectedCamera && !loadingCamera && (
+                    <>
+                      {!selectedCamera.has_snapshot && (
+                        <div className="alert alert-error">
+                          This camera has no reference frame.{' '}
+                          <Link to={`/cameras/${selectedCamera.id}`}>Upload one</Link> to analyse zones.
+                        </div>
+                      )}
+
+                      <div className="form-group">
+                        <label htmlFor="zone-select">Zone</label>
+                        <select
+                          id="zone-select"
+                          value={selectedZoneId}
+                          onChange={(e) => setSelectedZoneId(e.target.value)}
+                          disabled={selectedCamera.zones.length === 0}
+                        >
+                          <option value="">
+                            {selectedCamera.zones.length === 0
+                              ? 'No zones — add zones on the camera page'
+                              : 'Select a zone…'}
+                          </option>
+                          {selectedCamera.zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedCamera.zones.length === 0 && (
+                          <p className="form-hint">
+                            <Link to={`/cameras/${selectedCamera.id}`}>Draw zones</Link> on the camera view first.
+                          </p>
+                        )}
+                      </div>
+
+                      {loadingZonePreview && (
+                        <p className="text-muted">Loading zone preview…</p>
+                      )}
+
+                      {zonePreview && selectedZone && (
+                        <div className="zone-preview-wrap">
+                          <p className="text-muted zone-preview-label">
+                            Cropped preview — {selectedZone.name}
+                          </p>
+                          <img
+                            src={zonePreview}
+                            alt={`Cropped preview of ${selectedZone.name}`}
+                            className="upload-preview"
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           )}
 
           <div className="form-group" style={{ marginTop: '1rem' }}>
@@ -159,7 +379,7 @@ export default function DashboardPage() {
           <button
             className="btn btn-primary"
             type="submit"
-            disabled={!file || uploading || !model}
+            disabled={!canAnalyze || uploading || !model}
           >
             {uploading ? 'Analyzing…' : 'Analyze Shelf'}
           </button>

@@ -1,4 +1,3 @@
 JWT_SECRET=change-me-to-a-long-random-string-at-least-32-chars
-OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key-here
 # Override production FRONTEND_URL for local dev (optional — CORS also allows localhost)
 FRONTEND_URL=http://localhost:5173

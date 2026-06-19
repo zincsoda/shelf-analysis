@@ -183,8 +183,7 @@ export default function SettingsPage() {
     return <div className="loading">Loading settings…</div>;
   }
 
-  const canAnalyze =
-    settings?.has_openrouter_api_key || settings?.uses_global_openrouter_key;
+  const canAnalyze = settings?.has_openrouter_api_key;
   const modelsDirty =
     settings !== null &&
     (selectedModels.length !== settings.selected_models.length ||
@@ -223,9 +222,7 @@ export default function SettingsPage() {
       <div style={{ marginBottom: '1.25rem' }}>
         <strong>Status:</strong>{' '}
         {settings?.has_openrouter_api_key ? (
-          <span>Personal key configured ({settings.openrouter_key_hint})</span>
-        ) : settings?.uses_global_openrouter_key ? (
-          <span>Using shared server key</span>
+          <span>Key configured ({settings.openrouter_key_hint})</span>
         ) : (
           <span style={{ color: 'var(--warning)' }}>Not configured</span>
         )}

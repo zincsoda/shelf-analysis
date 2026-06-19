@@ -13,8 +13,7 @@ APP_NAME = "ShelfSight"
 FRONTEND_URL = "https://shelfsight.swlabs.cc,https://shelf-analysis-frontend.pages.dev"
 
 # ── Secrets (set via `wrangler secret put`) ─────────────────────────────────
-# JWT_SECRET          — random 32+ char string for signing tokens
-# OPENROUTER_API_KEY  — from https://openrouter.ai/keys
+# JWT_SECRET — random 32+ char string for signing tokens and encrypting user API keys
 
 # ── D1 Database ─────────────────────────────────────────────────────────────
 [[d1_databases]]

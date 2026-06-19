@@ -14,6 +14,18 @@ import {
   handleListAnalyses,
 } from './routes/analyses';
 import { handleGetSettings, handleGetOpenRouterModels, handleUpdateOpenRouterKey, handleUpdateSelectedModels } from './routes/settings';
+import {
+  handleCreateCamera,
+  handleCreateZone,
+  handleDeleteCamera,
+  handleDeleteZone,
+  handleGetCamera,
+  handleGetCameraPreview,
+  handleListCameras,
+  handleUpdateCamera,
+  handleUpdateZone,
+  handleUploadCameraSnapshot,
+} from './routes/cameras';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -114,6 +126,44 @@ async function route(
   const imageMatch = pathname.match(/^\/api\/images\/([^/]+)$/);
   if (imageMatch && method === 'GET') {
     return handleGetImage(request, env, imageMatch[1]);
+  }
+
+  // ── Camera routes ────────────────────────────────────────────────────────
+  if (pathname === '/api/cameras' && method === 'GET') {
+    return handleListCameras(request, env);
+  }
+  if (pathname === '/api/cameras' && method === 'POST') {
+    return handleCreateCamera(request, env);
+  }
+
+  const cameraMatch = pathname.match(/^\/api\/cameras\/([^/]+)$/);
+  if (cameraMatch) {
+    const cameraId = cameraMatch[1];
+    if (method === 'GET') return handleGetCamera(request, env, cameraId);
+    if (method === 'PUT') return handleUpdateCamera(request, env, cameraId);
+    if (method === 'DELETE') return handleDeleteCamera(request, env, cameraId);
+  }
+
+  const cameraPreviewMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/preview$/);
+  if (cameraPreviewMatch && method === 'GET') {
+    return handleGetCameraPreview(request, env, cameraPreviewMatch[1]);
+  }
+
+  const cameraSnapshotMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/snapshot$/);
+  if (cameraSnapshotMatch && method === 'POST') {
+    return handleUploadCameraSnapshot(request, env, cameraSnapshotMatch[1]);
+  }
+
+  const cameraZoneMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/zones$/);
+  if (cameraZoneMatch && method === 'POST') {
+    return handleCreateZone(request, env, cameraZoneMatch[1]);
+  }
+
+  const zoneMatch = pathname.match(/^\/api\/cameras\/([^/]+)\/zones\/([^/]+)$/);
+  if (zoneMatch) {
+    const [, cameraId, zoneId] = zoneMatch;
+    if (method === 'PUT') return handleUpdateZone(request, env, cameraId, zoneId);
+    if (method === 'DELETE') return handleDeleteZone(request, env, cameraId, zoneId);
   }
 
   // ── Health check ─────────────────────────────────────────────────────────

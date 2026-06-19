@@ -3,9 +3,15 @@ import type {
   AnalysisWithUser,
   ApiResponse,
   AuthSession,
+  Camera,
+  CameraWithZones,
+  CameraZone,
+  CreateCameraRequest,
   CreateUserRequest,
+  CreateZoneRequest,
   LoginRequest,
   OpenRouterModel,
+  UpdateCameraRequest,
   UpdateOpenRouterKeyRequest,
   UpdateSelectedModelsRequest,
   UpdateUserRequest,
@@ -141,6 +147,79 @@ class ApiClient {
 
   imageUrl(analysisId: string) {
     return `${API_BASE}/api/images/${analysisId}`;
+  }
+
+  listCameras() {
+    return this.request<{ cameras: Camera[] }>('/api/cameras');
+  }
+
+  createCamera(body: CreateCameraRequest) {
+    return this.request<{ camera: Camera }>('/api/cameras', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  getCamera(id: string) {
+    return this.request<{ camera: CameraWithZones }>(`/api/cameras/${id}`);
+  }
+
+  updateCamera(id: string, body: UpdateCameraRequest) {
+    return this.request<{ camera: Camera }>(`/api/cameras/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  deleteCamera(id: string) {
+    return this.request<{ message: string }>(`/api/cameras/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  uploadCameraSnapshot(cameraId: string, image: File) {
+    const form = new FormData();
+    form.append('image', image);
+    return this.request<{ camera: Camera }>(`/api/cameras/${cameraId}/snapshot`, {
+      method: 'POST',
+      body: form,
+    });
+  }
+
+  createZone(cameraId: string, body: CreateZoneRequest) {
+    return this.request<{ zone: CameraZone }>(`/api/cameras/${cameraId}/zones`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  deleteZone(cameraId: string, zoneId: string) {
+    return this.request<{ message: string }>(`/api/cameras/${cameraId}/zones/${zoneId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  cameraPreviewUrl(cameraId: string) {
+    return `${API_BASE}/api/cameras/${cameraId}/preview`;
+  }
+
+  async fetchCameraPreview(cameraId: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await fetch(this.cameraPreviewUrl(cameraId), { credentials: 'include' });
+    } catch {
+      throw new ApiError(
+        'NETWORK_ERROR',
+        'Could not reach the API. Make sure the worker is running (npm run dev).',
+        0,
+      );
+    }
+
+    if (!response.ok) {
+      throw new ApiError('PREVIEW_FAILED', `Failed to load camera preview (HTTP ${response.status})`, response.status);
+    }
+
+    return response.blob();
   }
 }
 

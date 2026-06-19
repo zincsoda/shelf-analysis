@@ -6,7 +6,6 @@ export interface Env {
   IMAGES: R2Bucket;
   RATE_LIMIT: KVNamespace;
   JWT_SECRET: string;
-  OPENROUTER_API_KEY?: string;
   FRONTEND_URL: string;
   APP_NAME: string;
 }
@@ -39,6 +38,30 @@ export interface AnalysisRow {
   empty_percentage: number;
   confidence: number;
   analysis_text: string;
+  created_at: string;
+}
+
+/** Database row shape for cameras table */
+export interface CameraRow {
+  id: string;
+  user_id: string;
+  name: string;
+  type: 'virtual' | 'real';
+  stream_url: string | null;
+  snapshot_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Database row shape for camera_zones table */
+export interface CameraZoneRow {
+  id: string;
+  camera_id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   created_at: string;
 }
 

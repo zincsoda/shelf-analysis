@@ -299,7 +299,8 @@ export default function DashboardPage() {
                       <option value="">Select a camera…</option>
                       {cameras.map((camera) => (
                         <option key={camera.id} value={camera.id}>
-                          {camera.name} ({camera.zone_count} zone{camera.zone_count === 1 ? '' : 's'})
+                          {camera.name} — {camera.perceptron_box_name ?? 'Unassigned'} (
+                          {camera.zone_count} zone{camera.zone_count === 1 ? '' : 's'})
                         </option>
                       ))}
                     </select>

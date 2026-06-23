@@ -80,9 +80,7 @@ npm run db:migrate:local
 ### 5. Seed admin user
 
 ```bash
-cd worker
-npx wrangler dev scripts/seed-admin.ts --local
-# Then visit http://localhost:8787 in browser to trigger seed
+npm run seed:admin:local
 # Default: admin@shelfsight.local / admin12345
 ```
 

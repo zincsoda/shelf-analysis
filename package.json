@@ -15,7 +15,8 @@
     "deploy:frontend": "npm run deploy -w frontend",
     "db:migrate:local": "npm run db:migrate:local -w worker",
     "db:migrate:remote": "npm run db:migrate:remote -w worker",
-    "seed:admin": "npm run seed:admin -w worker"
+    "seed:admin": "npm run seed:admin -w worker",
+    "seed:admin:local": "npm run seed:admin:local -w worker"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

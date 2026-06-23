@@ -9,7 +9,8 @@
     "build": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply shelf-analysis-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply shelf-analysis-db --remote",
-    "seed:admin": "npx tsx scripts/seed-admin-cli.ts"
+    "seed:admin": "npx tsx scripts/seed-admin-cli.ts",
+    "seed:admin:local": "npx tsx scripts/seed-admin-cli.ts --apply-local"
   },
   "dependencies": {
   },

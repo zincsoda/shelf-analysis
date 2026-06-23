@@ -9,10 +9,11 @@ export default function Layout() {
       <header className="app-header">
         <h1>ShelfSight</h1>
         <nav>
+          <NavLink to="/cameras">Cameras</NavLink>
+          <NavLink to="/perceptron-boxes">Perceptron Boxes</NavLink>
           <NavLink to="/" end>
             Analyse
           </NavLink>
-          <NavLink to="/cameras">Cameras</NavLink>
           <NavLink to="/settings">Settings</NavLink>
           {user?.role === 'admin' && (
             <NavLink to="/admin">Admin</NavLink>

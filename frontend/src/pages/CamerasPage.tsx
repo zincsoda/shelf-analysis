@@ -4,7 +4,7 @@ import { api, ApiError } from '../api/client';
 import type { Camera, CameraType, PerceptronBox } from '@shelf-analysis/shared';
 import { formatDate } from '../lib/utils';
 
-type ModalType = 'virtual' | 'real' | null;
+type ModalMode = 'virtual' | 'real' | 'edit' | null;
 
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
@@ -12,7 +12,8 @@ export default function CamerasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [modal, setModal] = useState<ModalType>(null);
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [name, setName] = useState('');
@@ -38,35 +39,49 @@ export default function CamerasPage() {
     load();
   }, [load]);
 
-  function openModal(type: CameraType) {
-    setModal(type);
+  function openCreateModal(type: CameraType) {
+    setModalMode(type);
+    setEditingCamera(null);
     setName('');
     setStreamUrl('');
     setPerceptronBoxId(boxes[0]?.id ?? '');
     setError('');
   }
 
+  function openEditModal(camera: Camera) {
+    setModalMode('edit');
+    setEditingCamera(camera);
+    setName(camera.name);
+    setError('');
+  }
+
   function closeModal() {
-    setModal(null);
+    setModalMode(null);
+    setEditingCamera(null);
     setName('');
     setStreamUrl('');
     setPerceptronBoxId('');
   }
 
-  async function handleCreate(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!modal) return;
     setSubmitting(true);
     setError('');
     try {
-      await api.createCamera({
-        name,
-        type: modal,
-        stream_url: modal === 'real' ? streamUrl : null,
-        perceptron_box_id: perceptronBoxId,
-      });
-      setSuccess(`${modal === 'virtual' ? 'Virtual' : 'Real'} camera created`);
-      closeModal();
+      if (modalMode === 'edit' && editingCamera) {
+        const { camera } = await api.updateCamera(editingCamera.id, { name });
+        closeModal();
+        setSuccess(`Camera renamed to "${camera.name}"`);
+      } else if (modalMode === 'virtual' || modalMode === 'real') {
+        await api.createCamera({
+          name,
+          type: modalMode,
+          stream_url: modalMode === 'real' ? streamUrl : null,
+          perceptron_box_id: perceptronBoxId,
+        });
+        setSuccess(`${modalMode === 'virtual' ? 'Virtual' : 'Real'} camera created`);
+        closeModal();
+      }
       await load();
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
@@ -103,10 +118,10 @@ export default function CamerasPage() {
             </p>
           </div>
           <div className="btn-group">
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openModal('virtual')}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openCreateModal('virtual')}>
               Add virtual camera
             </button>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => openModal('real')}>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => openCreateModal('real')}>
               Connect real camera
             </button>
           </div>
@@ -145,13 +160,22 @@ export default function CamerasPage() {
                     <td>{camera.zone_count}</td>
                     <td>{formatDate(camera.created_at)}</td>
                     <td>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(camera)}
-                      >
-                        Delete
-                      </button>
+                      <div className="btn-group">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => openEditModal(camera)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleDelete(camera)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -161,11 +185,17 @@ export default function CamerasPage() {
         )}
       </div>
 
-      {modal && (
+      {modalMode && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{modal === 'virtual' ? 'Create virtual camera' : 'Connect real camera'}</h3>
-            <form onSubmit={handleCreate}>
+            <h3>
+              {modalMode === 'edit'
+                ? 'Edit camera'
+                : modalMode === 'virtual'
+                  ? 'Create virtual camera'
+                  : 'Connect real camera'}
+            </h3>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label htmlFor="camera-name">Name</label>
                 <input
@@ -173,66 +203,86 @@ export default function CamerasPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={modal === 'virtual' ? 'Test shelf cam' : 'Store front entrance'}
+                  placeholder={
+                    modalMode === 'real'
+                      ? 'Store front entrance'
+                      : modalMode === 'virtual'
+                        ? 'Test shelf cam'
+                        : 'Camera name'
+                  }
                   required
                   autoFocus
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="perceptron-box">Perceptron Box</label>
-                {boxes.length === 0 ? (
-                  <p className="form-hint">
-                    No Perceptron Boxes yet. <Link to="/perceptron-boxes">Create one</Link> first.
-                  </p>
-                ) : (
-                  <select
-                    id="perceptron-box"
-                    value={perceptronBoxId}
-                    onChange={(e) => setPerceptronBoxId(e.target.value)}
-                    required
-                  >
-                    {boxes.map((box) => (
-                      <option key={box.id} value={box.id}>
-                        {box.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <p className="form-hint">
-                  {modal === 'real'
-                    ? 'The assigned box polls this camera on your local network and uploads snapshots.'
-                    : 'Virtual cameras are grouped under the same box for a consistent setup.'}
-                </p>
-              </div>
+              {modalMode !== 'edit' && (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="perceptron-box">Perceptron Box</label>
+                    {boxes.length === 0 ? (
+                      <p className="form-hint">
+                        No Perceptron Boxes yet. <Link to="/perceptron-boxes">Create one</Link> first.
+                      </p>
+                    ) : (
+                      <select
+                        id="perceptron-box"
+                        value={perceptronBoxId}
+                        onChange={(e) => setPerceptronBoxId(e.target.value)}
+                        required
+                      >
+                        {boxes.map((box) => (
+                          <option key={box.id} value={box.id}>
+                            {box.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="form-hint">
+                      {modalMode === 'real'
+                        ? 'The assigned box polls this camera on your local network and uploads snapshots.'
+                        : 'Virtual cameras are grouped under the same box for a consistent setup.'}
+                    </p>
+                  </div>
 
-              {modal === 'real' && (
-                <div className="form-group">
-                  <label htmlFor="stream-url">Stream URL</label>
-                  <input
-                    id="stream-url"
-                    type="url"
-                    value={streamUrl}
-                    onChange={(e) => setStreamUrl(e.target.value)}
-                    placeholder="rtsp://192.168.1.100:554/stream"
-                    required
-                  />
-                  <p className="form-hint">Supports RTSP, HTTP, or HTTPS snapshot/stream URLs.</p>
-                </div>
-              )}
+                  {modalMode === 'real' && (
+                    <div className="form-group">
+                      <label htmlFor="stream-url">Stream URL</label>
+                      <input
+                        id="stream-url"
+                        type="url"
+                        value={streamUrl}
+                        onChange={(e) => setStreamUrl(e.target.value)}
+                        placeholder="rtsp://192.168.1.100:554/stream"
+                        required
+                      />
+                      <p className="form-hint">Supports RTSP, HTTP, or HTTPS snapshot/stream URLs.</p>
+                    </div>
+                  )}
 
-              {modal === 'virtual' && (
-                <p className="form-hint">
-                  Virtual cameras use a placeholder preview. Upload a reference frame on the camera detail page to draw zones.
-                </p>
+                  {modalMode === 'virtual' && (
+                    <p className="form-hint">
+                      Virtual cameras use a placeholder preview. Upload a reference frame on the camera detail page to draw zones.
+                    </p>
+                  )}
+                </>
               )}
 
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting || boxes.length === 0}>
-                  {submitting ? 'Creating…' : 'Create'}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || (modalMode !== 'edit' && boxes.length === 0)}
+                >
+                  {submitting
+                    ? modalMode === 'edit'
+                      ? 'Saving…'
+                      : 'Creating…'
+                    : modalMode === 'edit'
+                      ? 'Save'
+                      : 'Create'}
                 </button>
               </div>
             </form>

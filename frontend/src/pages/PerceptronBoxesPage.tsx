@@ -9,7 +9,8 @@ export default function PerceptronBoxesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
+  const [editingBox, setEditingBox] = useState<PerceptronBox | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState('');
   const [pollInterval, setPollInterval] = useState(60);
@@ -30,31 +31,46 @@ export default function PerceptronBoxesPage() {
     load();
   }, [load]);
 
-  function openModal() {
-    setModalOpen(true);
+  function openCreateModal() {
+    setModalMode('create');
+    setEditingBox(null);
     setName('');
     setPollInterval(60);
+    setError('');
+  }
+
+  function openEditModal(box: PerceptronBox) {
+    setModalMode('edit');
+    setEditingBox(box);
+    setName(box.name);
     setError('');
   }
 
   function closeModal() {
-    setModalOpen(false);
+    setModalMode(null);
+    setEditingBox(null);
     setName('');
     setPollInterval(60);
   }
 
-  async function handleCreate(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError('');
     try {
-      const { box } = await api.createPerceptronBox({
-        name,
-        poll_interval_seconds: pollInterval,
-      });
-      setNewBoxToken(box);
-      closeModal();
-      setSuccess(`Perceptron Box "${box.name}" created`);
+      if (modalMode === 'edit' && editingBox) {
+        const { box } = await api.updatePerceptronBox(editingBox.id, { name });
+        closeModal();
+        setSuccess(`Perceptron Box renamed to "${box.name}"`);
+      } else {
+        const { box } = await api.createPerceptronBox({
+          name,
+          poll_interval_seconds: pollInterval,
+        });
+        setNewBoxToken(box);
+        closeModal();
+        setSuccess(`Perceptron Box "${box.name}" created`);
+      }
       await load();
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
@@ -159,7 +175,7 @@ export default function PerceptronBoxesPage() {
               Edge devices that poll IP cameras on your local network and upload snapshots to ShelfSight.
             </p>
           </div>
-          <button type="button" className="btn btn-primary btn-sm" onClick={openModal}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={openCreateModal}>
             Add Perceptron Box
           </button>
         </div>
@@ -202,6 +218,13 @@ export default function PerceptronBoxesPage() {
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
+                          onClick={() => openEditModal(box)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
                           onClick={() => handleRegenerateToken(box)}
                         >
                           New token
@@ -223,11 +246,11 @@ export default function PerceptronBoxesPage() {
         )}
       </div>
 
-      {modalOpen && (
+      {modalMode && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Perceptron Box</h3>
-            <form onSubmit={handleCreate}>
+            <h3>{modalMode === 'edit' ? 'Edit Perceptron Box' : 'Add Perceptron Box'}</h3>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label htmlFor="box-name">Name</label>
                 <input
@@ -240,25 +263,33 @@ export default function PerceptronBoxesPage() {
                   autoFocus
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="poll-interval">Snapshot poll interval (seconds)</label>
-                <input
-                  id="poll-interval"
-                  type="number"
-                  min={10}
-                  step={1}
-                  value={pollInterval}
-                  onChange={(e) => setPollInterval(Number(e.target.value))}
-                  required
-                />
-                <p className="form-hint">How often the edge device fetches snapshots from assigned cameras.</p>
-              </div>
+              {modalMode === 'create' && (
+                <div className="form-group">
+                  <label htmlFor="poll-interval">Snapshot poll interval (seconds)</label>
+                  <input
+                    id="poll-interval"
+                    type="number"
+                    min={10}
+                    step={1}
+                    value={pollInterval}
+                    onChange={(e) => setPollInterval(Number(e.target.value))}
+                    required
+                  />
+                  <p className="form-hint">How often the edge device fetches snapshots from assigned cameras.</p>
+                </div>
+              )}
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Creating…' : 'Create'}
+                  {submitting
+                    ? modalMode === 'edit'
+                      ? 'Saving…'
+                      : 'Creating…'
+                    : modalMode === 'edit'
+                      ? 'Save'
+                      : 'Create'}
                 </button>
               </div>
             </form>

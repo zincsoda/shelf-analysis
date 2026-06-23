@@ -49,6 +49,19 @@ export interface CameraRow {
   type: 'virtual' | 'real';
   stream_url: string | null;
   snapshot_key: string | null;
+  perceptron_box_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Database row shape for perceptron_boxes table */
+export interface PerceptronBoxRow {
+  id: string;
+  user_id: string;
+  name: string;
+  device_token_hash: string;
+  poll_interval_seconds: number;
+  last_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }

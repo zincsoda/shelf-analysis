@@ -26,6 +26,15 @@ import {
   handleUpdateZone,
   handleUploadCameraSnapshot,
 } from './routes/cameras';
+import {
+  handleCreatePerceptronBox,
+  handleDeletePerceptronBox,
+  handleGetPerceptronBox,
+  handleListPerceptronBoxes,
+  handleRegenerateDeviceToken,
+  handleUpdatePerceptronBox,
+} from './routes/perceptron-boxes';
+import { handleDeviceConfig, handleDeviceUploadSnapshot } from './routes/device';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -164,6 +173,39 @@ async function route(
     const [, cameraId, zoneId] = zoneMatch;
     if (method === 'PUT') return handleUpdateZone(request, env, cameraId, zoneId);
     if (method === 'DELETE') return handleDeleteZone(request, env, cameraId, zoneId);
+  }
+
+  // ── Perceptron Box routes ────────────────────────────────────────────────
+  if (pathname === '/api/perceptron-boxes' && method === 'GET') {
+    return handleListPerceptronBoxes(request, env);
+  }
+  if (pathname === '/api/perceptron-boxes' && method === 'POST') {
+    return handleCreatePerceptronBox(request, env);
+  }
+
+  const perceptronBoxMatch = pathname.match(/^\/api\/perceptron-boxes\/([^/]+)$/);
+  if (perceptronBoxMatch) {
+    const boxId = perceptronBoxMatch[1];
+    if (method === 'GET') return handleGetPerceptronBox(request, env, boxId);
+    if (method === 'PUT') return handleUpdatePerceptronBox(request, env, boxId);
+    if (method === 'DELETE') return handleDeletePerceptronBox(request, env, boxId);
+  }
+
+  const regenerateTokenMatch = pathname.match(
+    /^\/api\/perceptron-boxes\/([^/]+)\/regenerate-token$/,
+  );
+  if (regenerateTokenMatch && method === 'POST') {
+    return handleRegenerateDeviceToken(request, env, regenerateTokenMatch[1]);
+  }
+
+  // ── Device routes (Perceptron Box edge agent) ────────────────────────────
+  if (pathname === '/api/device/config' && method === 'GET') {
+    return handleDeviceConfig(request, env);
+  }
+
+  const deviceSnapshotMatch = pathname.match(/^\/api\/device\/cameras\/([^/]+)\/snapshot$/);
+  if (deviceSnapshotMatch && method === 'POST') {
+    return handleDeviceUploadSnapshot(request, env, deviceSnapshotMatch[1]);
   }
 
   // ── Health check ─────────────────────────────────────────────────────────

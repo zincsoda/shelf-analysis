@@ -12,13 +12,18 @@ import { requireAuth } from '../middleware/auth';
 import { jsonError, jsonSuccess, parseJsonBody } from '../lib/response';
 import { getImage, storeCameraSnapshot, validateImage } from '../services/storage';
 
-function rowToCamera(row: CameraRow, zoneCount: number): Camera {
+function rowToCamera(
+  row: CameraRow & { perceptron_box_name?: string | null },
+  zoneCount: number,
+): Camera {
   return {
     id: row.id,
     user_id: row.user_id,
     name: row.name,
     type: row.type,
     stream_url: row.stream_url,
+    perceptron_box_id: row.perceptron_box_id,
+    perceptron_box_name: row.perceptron_box_name ?? null,
     has_snapshot: Boolean(row.snapshot_key),
     zone_count: zoneCount,
     created_at: row.created_at,
@@ -47,6 +52,16 @@ async function getCameraForUser(
   return env.DB.prepare('SELECT * FROM cameras WHERE id = ? AND user_id = ?')
     .bind(cameraId, userId)
     .first<CameraRow>();
+}
+
+async function getBoxForUser(
+  env: Env,
+  boxId: string,
+  userId: string,
+): Promise<{ id: string } | null> {
+  return env.DB.prepare('SELECT id FROM perceptron_boxes WHERE id = ? AND user_id = ?')
+    .bind(boxId, userId)
+    .first<{ id: string }>();
 }
 
 async function getZoneCount(env: Env, cameraId: string): Promise<number> {
@@ -82,15 +97,16 @@ export async function handleListCameras(request: Request, env: Env): Promise<Res
   if (auth instanceof Response) return auth;
 
   const { results } = await env.DB.prepare(
-    `SELECT c.*, COUNT(z.id) as zone_count
+    `SELECT c.*, b.name as perceptron_box_name, COUNT(z.id) as zone_count
      FROM cameras c
+     LEFT JOIN perceptron_boxes b ON b.id = c.perceptron_box_id
      LEFT JOIN camera_zones z ON z.camera_id = c.id
      WHERE c.user_id = ?
      GROUP BY c.id
      ORDER BY c.created_at DESC`,
   )
     .bind(auth.user.id)
-    .all<CameraRow & { zone_count: number }>();
+    .all<CameraRow & { perceptron_box_name: string | null; zone_count: number }>();
 
   const cameras = results.map((row) => rowToCamera(row, row.zone_count));
   return jsonSuccess({ cameras });
@@ -110,6 +126,16 @@ export async function handleCreateCamera(request: Request, env: Env): Promise<Re
   }
 
   const streamUrl = body.stream_url?.trim() || null;
+  const perceptronBoxId = body.perceptron_box_id?.trim() || null;
+
+  if (!perceptronBoxId) {
+    return jsonError('VALIDATION_ERROR', 'Perceptron Box is required', 400);
+  }
+  const box = await getBoxForUser(env, perceptronBoxId, auth.user.id);
+  if (!box) {
+    return jsonError('VALIDATION_ERROR', 'Perceptron Box not found', 400);
+  }
+
   if (body.type === 'real') {
     if (!streamUrl) {
       return jsonError('VALIDATION_ERROR', 'Stream URL is required for real cameras', 400);
@@ -123,13 +149,20 @@ export async function handleCreateCamera(request: Request, env: Env): Promise<Re
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO cameras (id, user_id, name, type, stream_url, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO cameras (id, user_id, name, type, stream_url, perceptron_box_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, auth.user.id, body.name.trim(), body.type, streamUrl, now, now)
+    .bind(id, auth.user.id, body.name.trim(), body.type, streamUrl, perceptronBoxId, now, now)
     .run();
 
-  const row = await env.DB.prepare('SELECT * FROM cameras WHERE id = ?').bind(id).first<CameraRow>();
+  const row = await env.DB.prepare(
+    `SELECT c.*, b.name as perceptron_box_name
+     FROM cameras c
+     LEFT JOIN perceptron_boxes b ON b.id = c.perceptron_box_id
+     WHERE c.id = ?`,
+  )
+    .bind(id)
+    .first<CameraRow & { perceptron_box_name: string | null }>();
   return jsonSuccess({ camera: rowToCamera(row!, 0) }, 201);
 }
 
@@ -142,7 +175,14 @@ export async function handleGetCamera(
   const auth = await requireAuth(request, env);
   if (auth instanceof Response) return auth;
 
-  const row = await getCameraForUser(env, cameraId, auth.user.id);
+  const row = await env.DB.prepare(
+    `SELECT c.*, b.name as perceptron_box_name
+     FROM cameras c
+     LEFT JOIN perceptron_boxes b ON b.id = c.perceptron_box_id
+     WHERE c.id = ? AND c.user_id = ?`,
+  )
+    .bind(cameraId, auth.user.id)
+    .first<CameraRow & { perceptron_box_name: string | null }>();
   if (!row) return jsonError('NOT_FOUND', 'Camera not found', 404);
 
   const { results } = await env.DB.prepare(
@@ -172,8 +212,17 @@ export async function handleUpdateCamera(
   if (!row) return jsonError('NOT_FOUND', 'Camera not found', 404);
 
   const body = await parseJsonBody<UpdateCameraRequest>(request);
-  if (!body || (body.name === undefined && body.stream_url === undefined)) {
-    return jsonError('VALIDATION_ERROR', 'At least one field (name, stream_url) is required', 400);
+  if (
+    !body ||
+    (body.name === undefined &&
+      body.stream_url === undefined &&
+      body.perceptron_box_id === undefined)
+  ) {
+    return jsonError(
+      'VALIDATION_ERROR',
+      'At least one field (name, stream_url, perceptron_box_id) is required',
+      400,
+    );
   }
 
   const name = body.name !== undefined ? body.name.trim() : row.name;
@@ -192,14 +241,33 @@ export async function handleUpdateCamera(
     }
   }
 
+  let perceptronBoxId = row.perceptron_box_id;
+  if (body.perceptron_box_id !== undefined) {
+    perceptronBoxId = body.perceptron_box_id?.trim() || null;
+    if (!perceptronBoxId) {
+      return jsonError('VALIDATION_ERROR', 'Perceptron Box is required', 400);
+    }
+    const box = await getBoxForUser(env, perceptronBoxId, auth.user.id);
+    if (!box) {
+      return jsonError('VALIDATION_ERROR', 'Perceptron Box not found', 400);
+    }
+  }
+
   const now = new Date().toISOString();
   await env.DB.prepare(
-    'UPDATE cameras SET name = ?, stream_url = ?, updated_at = ? WHERE id = ?',
+    'UPDATE cameras SET name = ?, stream_url = ?, perceptron_box_id = ?, updated_at = ? WHERE id = ?',
   )
-    .bind(name, streamUrl, now, cameraId)
+    .bind(name, streamUrl, perceptronBoxId, now, cameraId)
     .run();
 
-  const updated = await env.DB.prepare('SELECT * FROM cameras WHERE id = ?').bind(cameraId).first<CameraRow>();
+  const updated = await env.DB.prepare(
+    `SELECT c.*, b.name as perceptron_box_name
+     FROM cameras c
+     LEFT JOIN perceptron_boxes b ON b.id = c.perceptron_box_id
+     WHERE c.id = ?`,
+  )
+    .bind(cameraId)
+    .first<CameraRow & { perceptron_box_name: string | null }>();
   const zoneCount = await getZoneCount(env, cameraId);
   return jsonSuccess({ camera: rowToCamera(updated!, zoneCount) });
 }

@@ -118,6 +118,23 @@ export interface UpdateSelectedModelsRequest {
 
 export type CameraType = 'virtual' | 'real';
 
+/** Edge device that polls local IP cameras and uploads snapshots */
+export interface PerceptronBox {
+  id: string;
+  user_id: string;
+  name: string;
+  poll_interval_seconds: number;
+  camera_count: number;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Perceptron Box returned once when created or when the device token is regenerated */
+export interface PerceptronBoxWithToken extends PerceptronBox {
+  device_token: string;
+}
+
 /** IP camera configuration */
 export interface Camera {
   id: string;
@@ -125,6 +142,8 @@ export interface Camera {
   name: string;
   type: CameraType;
   stream_url: string | null;
+  perceptron_box_id: string | null;
+  perceptron_box_name: string | null;
   has_snapshot: boolean;
   zone_count: number;
   created_at: string;
@@ -148,15 +167,44 @@ export interface CameraWithZones extends Camera {
   zones: CameraZone[];
 }
 
+export interface CreatePerceptronBoxRequest {
+  name: string;
+  poll_interval_seconds?: number;
+}
+
+export interface UpdatePerceptronBoxRequest {
+  name?: string;
+  poll_interval_seconds?: number;
+}
+
+/** Camera config pushed to a Perceptron Box for local snapshot polling */
+export interface DeviceCameraConfig {
+  id: string;
+  name: string;
+  stream_url: string;
+}
+
+/** Full config a Perceptron Box pulls on startup and periodically */
+export interface DeviceConfig {
+  box: {
+    id: string;
+    name: string;
+    poll_interval_seconds: number;
+  };
+  cameras: DeviceCameraConfig[];
+}
+
 export interface CreateCameraRequest {
   name: string;
   type: CameraType;
   stream_url?: string | null;
+  perceptron_box_id?: string | null;
 }
 
 export interface UpdateCameraRequest {
   name?: string;
   stream_url?: string | null;
+  perceptron_box_id?: string | null;
 }
 
 export interface CreateZoneRequest {

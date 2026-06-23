@@ -11,6 +11,10 @@ import type {
   CreateZoneRequest,
   LoginRequest,
   OpenRouterModel,
+  PerceptronBox,
+  PerceptronBoxWithToken,
+  CreatePerceptronBoxRequest,
+  UpdatePerceptronBoxRequest,
   UpdateCameraRequest,
   UpdateOpenRouterKeyRequest,
   UpdateSelectedModelsRequest,
@@ -201,6 +205,37 @@ class ApiClient {
 
   cameraPreviewUrl(cameraId: string) {
     return `${API_BASE}/api/cameras/${cameraId}/preview`;
+  }
+
+  listPerceptronBoxes() {
+    return this.request<{ boxes: PerceptronBox[] }>('/api/perceptron-boxes');
+  }
+
+  createPerceptronBox(body: CreatePerceptronBoxRequest) {
+    return this.request<{ box: PerceptronBoxWithToken }>('/api/perceptron-boxes', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  updatePerceptronBox(id: string, body: UpdatePerceptronBoxRequest) {
+    return this.request<{ box: PerceptronBox }>(`/api/perceptron-boxes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  deletePerceptronBox(id: string) {
+    return this.request<{ message: string }>(`/api/perceptron-boxes/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  regenerateDeviceToken(id: string) {
+    return this.request<{ box: PerceptronBoxWithToken }>(
+      `/api/perceptron-boxes/${id}/regenerate-token`,
+      { method: 'POST' },
+    );
   }
 
   async fetchCameraPreview(cameraId: string): Promise<Blob> {

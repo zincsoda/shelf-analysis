@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
-import type { Camera, CameraType } from '@shelf-analysis/shared';
+import type { Camera, CameraType, PerceptronBox } from '@shelf-analysis/shared';
 import { formatDate } from '../lib/utils';
 
 type ModalType = 'virtual' | 'real' | null;
 
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [boxes, setBoxes] = useState<PerceptronBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -16,11 +17,16 @@ export default function CamerasPage() {
 
   const [name, setName] = useState('');
   const [streamUrl, setStreamUrl] = useState('');
+  const [perceptronBoxId, setPerceptronBoxId] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const { cameras: list } = await api.listCameras();
+      const [{ cameras: list }, { boxes: boxList }] = await Promise.all([
+        api.listCameras(),
+        api.listPerceptronBoxes(),
+      ]);
       setCameras(list);
+      setBoxes(boxList);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
     } finally {
@@ -36,6 +42,7 @@ export default function CamerasPage() {
     setModal(type);
     setName('');
     setStreamUrl('');
+    setPerceptronBoxId(boxes[0]?.id ?? '');
     setError('');
   }
 
@@ -43,6 +50,7 @@ export default function CamerasPage() {
     setModal(null);
     setName('');
     setStreamUrl('');
+    setPerceptronBoxId('');
   }
 
   async function handleCreate(e: FormEvent) {
@@ -55,6 +63,7 @@ export default function CamerasPage() {
         name,
         type: modal,
         stream_url: modal === 'real' ? streamUrl : null,
+        perceptron_box_id: perceptronBoxId,
       });
       setSuccess(`${modal === 'virtual' ? 'Virtual' : 'Real'} camera created`);
       closeModal();
@@ -90,7 +99,7 @@ export default function CamerasPage() {
           <div>
             <h2>Cameras</h2>
             <p className="text-muted">
-              Manage virtual test cameras or connect to real IP cameras. Open a camera to draw detection zones.
+              All cameras are assigned to a Perceptron Box. Real cameras are polled on your local network; virtual cameras are for testing.
             </p>
           </div>
           <div className="btn-group">
@@ -106,7 +115,7 @@ export default function CamerasPage() {
         {cameras.length === 0 ? (
           <div className="empty-state">
             <p>No cameras yet.</p>
-            <p className="text-muted">Create a virtual camera for testing or connect a real IP camera.</p>
+            <p className="text-muted">Create a Perceptron Box first, then add virtual or real cameras.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -115,6 +124,7 @@ export default function CamerasPage() {
                 <tr>
                   <th>Name</th>
                   <th>Type</th>
+                  <th>Perceptron Box</th>
                   <th>Zones</th>
                   <th>Created</th>
                   <th></th>
@@ -131,6 +141,7 @@ export default function CamerasPage() {
                         {camera.type === 'virtual' ? 'Virtual' : 'Real'}
                       </span>
                     </td>
+                    <td>{camera.perceptron_box_name ?? '—'}</td>
                     <td>{camera.zone_count}</td>
                     <td>{formatDate(camera.created_at)}</td>
                     <td>
@@ -168,6 +179,33 @@ export default function CamerasPage() {
                 />
               </div>
 
+              <div className="form-group">
+                <label htmlFor="perceptron-box">Perceptron Box</label>
+                {boxes.length === 0 ? (
+                  <p className="form-hint">
+                    No Perceptron Boxes yet. <Link to="/perceptron-boxes">Create one</Link> first.
+                  </p>
+                ) : (
+                  <select
+                    id="perceptron-box"
+                    value={perceptronBoxId}
+                    onChange={(e) => setPerceptronBoxId(e.target.value)}
+                    required
+                  >
+                    {boxes.map((box) => (
+                      <option key={box.id} value={box.id}>
+                        {box.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="form-hint">
+                  {modal === 'real'
+                    ? 'The assigned box polls this camera on your local network and uploads snapshots.'
+                    : 'Virtual cameras are grouped under the same box for a consistent setup.'}
+                </p>
+              </div>
+
               {modal === 'real' && (
                 <div className="form-group">
                   <label htmlFor="stream-url">Stream URL</label>
@@ -193,7 +231,7 @@ export default function CamerasPage() {
                 <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                <button type="submit" className="btn btn-primary" disabled={submitting || boxes.length === 0}>
                   {submitting ? 'Creating…' : 'Create'}
                 </button>
               </div>

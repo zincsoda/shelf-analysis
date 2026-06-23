@@ -101,6 +101,8 @@ export default function CameraDetailPage() {
             <h2>{camera.name}</h2>
             <p className="text-muted">
               {camera.type === 'virtual' ? 'Virtual camera' : 'Real IP camera'}
+              {' · Perceptron Box: '}
+              {camera.perceptron_box_name ?? 'Unassigned'}
               {camera.stream_url && <> · {camera.stream_url}</>}
             </p>
           </div>
